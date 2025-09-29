@@ -1,103 +1,209 @@
-import Image from "next/image";
+'use client'
+import axios from 'axios';
+import { useRef, useState } from 'react';
+import { useEffect } from 'react';
+const Home = () => {
+    const [password, setPassword] = useState('');
+    const [authed, setAuthed] = useState(false);
+    const [error, setError] = useState('');
+    const [command, setCommand] = useState('');
+    const [history, setHistory] = useState<Array<{ cmd: string; resp: string }>>([]);
+    const [inputRef, setInputRef] = useState<any>(null);
+    const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+    const historyContainerRef = useRef<HTMLDivElement>(null);
+    const sendCommand = async (command: string) => {
+        try {
+            const res = await axios.post('/api/send-command', { command, password });
+            if (res.data.error) {
+                setError(res.data.error);
+                setHistory(h => [...h, { cmd: command, resp: `[错误] ${res.data.error}` }]);
+                return;
+            }
+            setHistory(h => [...h, { cmd: command, resp: res.data.data.response }]);
+            setTimeout(() => {
+                if (historyContainerRef.current) {
+                    historyContainerRef.current.scrollTo({
+                        top: historyContainerRef.current.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }
+            }, 100);
+            setError('');
+        } catch (error: any) {
+            const errMsg = error.response && error.response.data && error.response.data.error ? error.response.data.error : (error instanceof Error ? error.message : '网络错误或服务器异常');
+            setError(errMsg);
+            setHistory(h => [...h, { cmd: command, resp: `[错误] ${errMsg}` }]);
+        }
+    };
+    const handleAuth = () => {
+        if (!password) {
+            setError('请输入密码');
+            return;
+        }
+        axios.post('/api/auth/login', { password }).then(res => {
+            if (res.data.error) {
+                setError(res.data.error);
+                setAuthed(false);
+            } else {
+                setAuthed(true);
+                setError('');
+                document.cookie = `mc_admin_pwd=${encodeURIComponent(password)}; path=/; max-age=2592000`;
+            }
+        }).catch((error: any) => {
+            const errMsg = error.response && error.response.data && error.response.data.error ? error.response.data.error : (error instanceof Error ? error.message : '网络错误或服务器异常');
+            setError(errMsg);
+        });
+    };
 
-export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    useEffect(() => {
+        const match = document.cookie.match(/(?:^|; )mc_admin_pwd=([^;]*)/);
+        if (match && match[1]) {
+            setPassword(decodeURIComponent(match[1]));
+            axios.post('/api/auth/login', { password: decodeURIComponent(match[1]) }).then(res => {
+                if (!res.data.error) {
+                    setAuthed(true);
+                    setError('');
+                } else {
+                    setAuthed(false);
+                    setError(res.data.error);
+                }
+            }).catch((error: any) => {
+                const errMsg = error.response && error.response.data && error.response.data.error ? error.response.data.error : (error instanceof Error ? error.message : '网络错误或服务器异常');
+                setError(errMsg);
+                document.cookie = 'mc_admin_pwd=; path=/; max-age=0';
+            });
+        }
+    }, []);
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 to-purple-200">
+            <div className="max-w-[calc(100vw-20px)] sm:max-w-[80vw] max-h-[calc(100vh-20px)] sm:max-h-[80vh] bg-white rounded-2xl shadow-2xl p-12 flex flex-col gap-4">
+                <h1 className="text-3xl font-bold text-center text-purple-700 mb-4">Minecraft 管理终端</h1>
+                {!authed ? (
+                    <>
+                        <input
+                            type="password"
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') { handleAuth(); } }}
+                            className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-700"
+                            placeholder="请输入管理密码..."
+                        />
+                        <button
+                            onClick={handleAuth}
+                            className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 shadow"
+                        >
+                            登录
+                        </button>
+                        {error && <div className="text-red-500 text-sm text-center">{error}</div>}
+                    </>
+                ) : (
+                    <div className="flex flex-col gap-4 overflow-auto">
+                        <div ref={historyContainerRef} className="bg-gray-900 text-white rounded-lg p-4 font-mono text-sm overflow-auto flex flex-col border-box">
+                            {history.length === 0 && <div className="text-gray-500">欢迎使用，输入指令后回车发送。</div>}
+                            {history.map((item, idx) => (
+                                <div key={idx}>
+                                    <div className="flex"><span className="text-green-400">$</span>&nbsp;<span className="text-blue-300">{item.cmd}</span></div>
+                                    <div className="pl-4" dangerouslySetInnerHTML={{ __html: mcToHtml(item.resp) }}></div>
+                                </div>
+                            ))}
+                        </div>
+                        <form
+                            onSubmit={e => { e.preventDefault(); if (command.trim()) { sendCommand(command); setCommand(''); setHistoryIndex(null); if (inputRef) inputRef.focus(); } }}
+                            className="flex gap-2"
+                        >
+                            <span className="text-green-400 font-mono pt-2">$</span>
+                            <input
+                                ref={ref => setInputRef(ref)}
+                                value={command}
+                                onChange={e => { setCommand(e.target.value); setHistoryIndex(null); }}
+                                onKeyDown={e => {
+                                    if (e.key === 'ArrowUp') {
+                                        e.preventDefault();
+                                        if (history.length === 0) return;
+                                        let idx = historyIndex === null ? history.length - 1 : historyIndex - 1;
+                                        if (idx < 0) idx = 0;
+                                        setCommand(history[idx]?.cmd || '');
+                                        setHistoryIndex(idx);
+                                    } else if (e.key === 'ArrowDown') {
+                                        e.preventDefault();
+                                        if (history.length === 0) return;
+                                        let idx = historyIndex === null ? history.length : historyIndex + 1;
+                                        if (idx >= history.length) {
+                                            setCommand('');
+                                            setHistoryIndex(null);
+                                        } else {
+                                            setCommand(history[idx]?.cmd || '');
+                                            setHistoryIndex(idx);
+                                        }
+                                    }
+                                }}
+                                className="min-w-0 flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-700 font-mono"
+                                placeholder="输入指令并回车..."
+                                autoFocus
+                                autoComplete="off"
+                            />
+                            <button
+                                type="submit"
+                                className="shrink-0 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 shadow cursor-pointer"
+                            >发送</button>
+                        </form>
+                        <button
+                            onClick={() => { setAuthed(false); setPassword(''); setCommand(''); setHistory([]); document.cookie = 'mc_admin_pwd=; path=/; max-age=0'; }}
+                            className="text-xs text-gray-400 hover:text-gray-700 mt-2 self-end cursor-pointer"
+                        >退出登录</button>
+                        {error && <div className="text-red-500 text-sm text-center">{error}</div>}
+                    </div>
+                )}
+            </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+    )
+
+}
+export default Home;
+
+const colorMap = {
+    '0': '#000000', // 黑色
+    '1': '#0000AA', // 深蓝色
+    '2': '#00AA00', // 深绿色
+    '3': '#00AAAA', // 青色
+    '4': '#AA0000', // 深红色
+    '5': '#AA00AA', // 紫色
+    '6': '#FFAA00', // 金色
+    '7': '#AAAAAA', // 浅灰色
+    '8': '#555555', // 深灰色
+    '9': '#5555FF', // 蓝色
+    'a': '#55FF55', // 绿色
+    'b': '#55FFFF', // 浅青色
+    'c': '#FF5555', // 红色
+    'd': '#FF55FF', // 粉红色
+    'e': '#FFFF55', // 黄色
+    'f': '#FFFFFF', // 白色
+    'l': 'font-weight: bold',
+    'o': 'font-style: italic',
+    'n': 'text-decoration: underline',
+    'm': 'text-decoration: line-through',
+    'k': 'color: transparent; text-shadow: 0 0 3px currentColor',
+    'r': 'all: unset'
+};
+
+function mcToHtml(text: string): string {
+    if (!text) return '';
+
+    const textWithBr = text.replaceAll('\n', '<br />');
+
+    const htmlWithSpans = textWithBr.replace(
+        /§([0-9a-fklmnor])/gi,
+        (match, code: string) => {
+            const style = colorMap[code.toLowerCase() as keyof typeof colorMap];
+            if (!style) return '';
+
+            const spanStyle = style.startsWith('#')
+                ? `color: ${style}`
+                : style;
+            return `</span><span style="${spanStyle}">`;
+        }
+    );
+    console.log(htmlWithSpans);
+
+    return `<span>${htmlWithSpans}</span>`;
 }
