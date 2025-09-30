@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { Rcon } from 'rcon-client';
 
 const CORS_HEADERS = {
     'Access-Control-Allow-Origin': '*',
@@ -29,9 +30,21 @@ export async function POST(request: NextRequest) {
         if (data.password !== process.env.ADMIN_PASSWORD) {
             return new Response(JSON.stringify({ success: false, error: '密码错误。', data: null }), { status: 403, headers: CORS_HEADERS });
         }
-        else {
-            return new Response(JSON.stringify({ success: true, error: null, data: { message: '认证成功' } }), { status: 200, headers: CORS_HEADERS });
+
+        const rconHost = typeof data.rconHost === 'string' && data.rconHost ? data.rconHost : process.env.RCON_HOST;
+        const rconPort = typeof data.rconPort === 'string' && data.rconPort ? data.rconPort : process.env.RCON_PORT;
+        const rconPassword = typeof data.rconPassword === 'string' && data.rconPassword ? data.rconPassword : process.env.RCON_PASSWORD;
+        if (!rconHost || !rconPort || !rconPassword) {
+            return new Response(JSON.stringify({ success: false, error: 'RCON配置不完整。', data: null }), { status: 400, headers: CORS_HEADERS });
         }
+        try {
+            const rcon = await Rcon.connect({ host: rconHost, port: Number(rconPort), password: rconPassword });
+            await rcon.end();
+        } catch (err) {
+            return new Response(JSON.stringify({ success: false, error: 'RCON连接失败，请检查配置和密码。', data: null }), { status: 403, headers: CORS_HEADERS });
+        }
+
+        return new Response(JSON.stringify({ success: true, error: null, data: { message: '认证成功，RCON可用。' } }), { status: 200, headers: CORS_HEADERS });
     } catch (error) {
         return new Response(
             JSON.stringify({ success: false, error: '服务器内部错误。', data: null }), { status: 500, headers: CORS_HEADERS }

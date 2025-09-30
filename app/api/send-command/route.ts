@@ -14,7 +14,7 @@ export async function OPTIONS() {
 
 export async function POST(request: NextRequest) {
     try {
-        if (typeof process.env.RCON_HOST !== 'string' || typeof process.env.RCON_PORT !== 'string' || typeof process.env.RCON_PASSWORD !== 'string' || typeof process.env.ADMIN_PASSWORD !== 'string') {
+        if (typeof process.env.ADMIN_PASSWORD !== 'string') {
             return new Response(JSON.stringify({ success: false, error: '服务器配置不正确。', data: null }), { status: 500, headers: CORS_HEADERS });
         }
 
@@ -35,9 +35,16 @@ export async function POST(request: NextRequest) {
             return new Response(JSON.stringify({ success: false, error: '密码错误。', data: null }), { status: 403, headers: CORS_HEADERS });
         }
 
+        const rconHost = typeof data.rconHost === 'string' && data.rconHost ? data.rconHost : process.env.RCON_HOST;
+        const rconPort = typeof data.rconPort === 'string' && data.rconPort ? data.rconPort : process.env.RCON_PORT;
+        const rconPassword = typeof data.rconPassword === 'string' && data.rconPassword ? data.rconPassword : process.env.RCON_PASSWORD;
+        if (!rconHost || !rconPort || !rconPassword) {
+            return new Response(JSON.stringify({ success: false, error: 'RCON配置不完整。', data: null }), { status: 400, headers: CORS_HEADERS });
+        }
+
         let rcon;
         try {
-            rcon = await Rcon.connect({ host: process.env.RCON_HOST, port: Number(process.env.RCON_PORT), password: process.env.RCON_PASSWORD });
+            rcon = await Rcon.connect({ host: rconHost, port: Number(rconPort), password: rconPassword });
 
             const command = data.command;
             const response = await rcon.send(command);
